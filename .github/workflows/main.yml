@@ -13,6 +13,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract project ZIP
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No project ZIP found"
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+      - name: Find Gradle project
+        run: |
+          SETTINGS=$(find extracted -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle file not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project found at: $PROJECT_DIR"
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -21,12 +44,21 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       - name: Build APK
-        run: gradle assembleDebug --no-daemon
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk-output
+          find "$PROJECT_DIR/app/build/outputs/apk/debug" -name "*.apk" -exec cp {} apk-output/ \;
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: sadee-optimizer-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: apk-output/*.apk
